@@ -991,7 +991,7 @@ pyrowave_result upload_cpu_input(pyrowave_encoder encoder, const pyrowave_cpu_bu
 }
 
 // Wraps the caller's IOSurfaces: either one biplanar NV12 or P010 surface, or three
-// single plane R8 surfaces.
+// single plane R8 or R16 surfaces.
 pyrowave_result wrap_gpu_input(pyrowave_encoder encoder, const pyrowave_gpu_input *input,
                                InputTextures &wrapped)
 {
@@ -1092,8 +1092,17 @@ pyrowave_result wrap_gpu_input(pyrowave_encoder encoder, const pyrowave_gpu_inpu
 			if (!plane_matches(surface(i), 0, width, height))
 				return PYROWAVE_ERROR_INVALID_ARGUMENT;
 
+			// Single plane surfaces may carry 16-bit samples (e.g. 'L016'), read as R16 UNORM.
+			const size_t sample_bytes = IOSurfaceGetBytesPerElement(surface(i));
+			if (sample_bytes != 1 && sample_bytes != 2)
+			{
+				device->log("Input planes[%d] has %zu bytes per sample, expected 1 or 2.", i, sample_bytes);
+				return PYROWAVE_ERROR_INVALID_ARGUMENT;
+			}
+
 			wrapped.sampled[i] = wrapped.adopt(wrap_surface_plane(
-					device, surface(i), 0, MTLPixelFormatR8Unorm, width, height, false));
+					device, surface(i), 0, sample_bytes == 2 ? MTLPixelFormatR16Unorm : MTLPixelFormatR8Unorm,
+					width, height, false));
 
 			if (!wrapped.sampled[i])
 				return PYROWAVE_ERROR_OUT_OF_DEVICE_MEMORY;
