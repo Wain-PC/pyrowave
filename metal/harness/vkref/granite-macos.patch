@@ -1,0 +1,39 @@
+diff --git a/util/timer.cpp b/util/timer.cpp
+index a1408352..0b395988 100644
+--- a/util/timer.cpp
++++ b/util/timer.cpp
+@@ -138,6 +138,16 @@ void sleep_until_nsecs(int64_t timepoint)
+ 		_mm_pause();
+ #endif
+ 	}
++#elif defined(__APPLE__)
++	// Local macOS build fix: Darwin has no clock_nanosleep().
++	int64_t d = timepoint - get_current_time_nsecs();
++	if (d > 0)
++	{
++		struct timespec ts = {};
++		ts.tv_sec = d / 1000000000ll;
++		ts.tv_nsec = d % 1000000000ll;
++		while (nanosleep(&ts, &ts) == -1 && errno == EINTR) {}
++	}
+ #else
+ 	constexpr auto timebase = CLOCK_MONOTONIC;
+ 	struct timespec ts = {};
+diff --git a/vulkan/device.cpp b/vulkan/device.cpp
+index 11aeadbd..124ab5e5 100644
+--- a/vulkan/device.cpp
++++ b/vulkan/device.cpp
+@@ -5871,6 +5871,13 @@ bool Device::supports_subgroup_size_log2(bool subgroup_full_group, uint8_t subgr
+ 		return false;
+ 	}
+ 
++	// Local cross-check aid (not upstream): MoltenVK reports no requiredSubgroupSizeStages,
++	// but Apple GPUs always run compute at their native SIMD width. With
++	// PYROWAVE_ASSUME_NATIVE_SUBGROUP=1, accept a request that contains that width.
++	if (getenv("PYROWAVE_ASSUME_NATIVE_SUBGROUP") &&
++	    min_subgroups <= ext.vk11_props.subgroupSize && max_subgroups >= ext.vk11_props.subgroupSize)
++		return true;
++
+ 	// We need requiredSubgroupSizeStages support here.
+ 	return (ext.vk13_props.requiredSubgroupSizeStages & stage) != 0;
+ }

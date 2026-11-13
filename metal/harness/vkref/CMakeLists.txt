@@ -1,7 +1,10 @@
 # Builds upstream's Vulkan reference tools (encode.cpp / decode.cpp) without SDL, so
 # the Metal port can be cross-checked against them on macOS through MoltenVK.
 #
-# Requires ./checkout_granite.sh to have been run in the repository root.
+# Requires ./checkout_granite.sh to have been run in the repository root, and on macOS
+# granite-macos.patch applied to that checkout (git -C Granite apply ...). The patch
+# makes Granite build on Darwin and, with PYROWAVE_ASSUME_NATIVE_SUBGROUP=1 set, lets
+# the Vulkan encoder start on MoltenVK, which cannot pin a compute subgroup size.
 cmake_minimum_required(VERSION 3.20)
 project(pyrowave-vkref LANGUAGES CXX C)
 

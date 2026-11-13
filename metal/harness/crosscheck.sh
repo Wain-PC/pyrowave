@@ -18,6 +18,8 @@ if [ "$(uname)" = Darwin ]; then
 	BREW_PREFIX=${HOMEBREW_PREFIX:-/opt/homebrew}
 	export VK_ICD_FILENAMES=${VK_ICD_FILENAMES:-$BREW_PREFIX/etc/vulkan/icd.d/MoltenVK_icd.json}
 	export DYLD_FALLBACK_LIBRARY_PATH=${DYLD_FALLBACK_LIBRARY_PATH:-$BREW_PREFIX/lib}
+	# Honoured only by a Granite checkout carrying vkref/granite-macos.patch.
+	export PYROWAVE_ASSUME_NATIVE_SUBGROUP=1
 fi
 
 PWMETAL=$1
@@ -93,6 +95,15 @@ run_clip() {
 		check "Metal vs Vulkan decoder on the Metal stream ($input)" \
 			"$(psnr "${stream%.pyrowave}__metal.y4m" "${stream%.pyrowave}__vulkan.y4m")" "$MIN_DECODER_AGREEMENT"
 	done
+
+	# encode.cpp at this commit passes a sample count where its 16-bit y4m reader
+	# expects bytes, so it encodes garbage from 10-bit input. Only the 8-bit profiles
+	# can use the Vulkan encoder as a reference.
+	case $profile in *-10)
+		echo "    skip  Vulkan encoder: upstream's tool cannot read 16-bit input at this commit"
+		return
+		;;
+	esac
 
 	local stream="${base}_vulkan.pyrowave"
 	if "$VKREF/pyrowave-encode" "$clip" "$stream" "$bytes" >/dev/null 2>&1 && [ -s "$stream" ] &&
