@@ -4271,7 +4271,8 @@ kernel void pyrowave_block_packing(device Payloads& payload_data [[buffer(0)]], 
     uint global_planes_offset = ((4u * global_payload_offset) + (3u * total_subblocks)) + 8u;
     uint global_sign_offset = global_planes_offset + spvClustered_sum<16>(required_plane_bytes, gl_SubgroupInvocationID);
     global_planes_offset += local_planes_offset;
-    uint total_sign_bytes = (spvSubgroupShuffle(total_sign_bits, gl_SubgroupInvocationID | 15u) + 7u) / 8u;
+    uint total_block_sign_bits = spvSubgroupShuffle(total_sign_bits, gl_SubgroupInvocationID | 15u);
+    uint total_sign_bytes = (total_block_sign_bits + 7u) / 8u;
     if (active_code_word)
     {
         uint block_header_offset = uint(int(popcount(extract_bits(local_ballot, uint(0), uint((local_block_index.y * 4) + local_block_index.x)))));
@@ -4293,9 +4294,9 @@ kernel void pyrowave_block_packing(device Payloads& payload_data [[buffer(0)]], 
                 uint param_7 = output_offset;
                 uint param_8 = input_offset + 1u;
                 uint param_9 = out_planes;
-                uint _753 = copy_bytes(param_7, param_8, param_9, payload_data, bitstream_data_8b);
+                uint _755 = copy_bytes(param_7, param_8, param_9, payload_data, bitstream_data_8b);
                 output_offset = param_7;
-                uint significant_mask = _753;
+                uint significant_mask = _755;
                 uint param_10 = linear_block_32x32_index;
                 uint param_11 = local_sign_offset;
                 uint param_12 = sign_plane;
@@ -4312,22 +4313,42 @@ kernel void pyrowave_block_packing(device Payloads& payload_data [[buffer(0)]], 
         bitstream_data_8b.data[(((4u * global_payload_offset) + (2u * total_subblocks)) + block_header_offset) + 8u] = uchar(code_word >> uint(16));
     }
     simdgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup | mem_flags::mem_texture);
-    uint _802 = index & 15u;
-    for (uint i = _802; i < (total_sign_bytes / 4u); i += 16u)
+    uint _804 = index & 15u;
+    for (uint i = _804; i < (total_sign_bytes / 4u); i += 16u)
     {
         uint sign_word = shared_sign_bank[linear_block_32x32_index][i];
+        uint valid_bits = total_block_sign_bits - (32u * i);
+        if (valid_bits < 32u)
+        {
+            sign_word &= ((1u << valid_bits) - 1u);
+        }
         uint offset_8b = global_sign_offset + (4u * i);
         bitstream_data_8b.data[offset_8b + 0u] = uchar(sign_word >> uint(0));
         bitstream_data_8b.data[offset_8b + 1u] = uchar(sign_word >> uint(8));
         bitstream_data_8b.data[offset_8b + 2u] = uchar(sign_word >> uint(16));
         bitstream_data_8b.data[offset_8b + 3u] = uchar(sign_word >> uint(24));
     }
-    uint _855 = (total_sign_bytes & 4294967292u) + (index & 15u);
-    for (uint i_1 = _855; i_1 < total_sign_bytes; i_1 += 16u)
+    uint _871 = (total_sign_bytes & 4294967292u) + (index & 15u);
+    for (uint i_1 = _871; i_1 < total_sign_bytes; i_1 += 16u)
     {
         uint sign_word_1 = shared_sign_bank[linear_block_32x32_index][i_1 / 4u];
         uint offset_8b_1 = global_sign_offset + i_1;
-        bitstream_data_8b.data[offset_8b_1] = uchar(sign_word_1 >> (8u * (i_1 & 3u)));
+        uint sign_byte = (sign_word_1 >> (8u * (i_1 & 3u))) & 255u;
+        uint valid_bits_1 = total_block_sign_bits - (8u * i_1);
+        if (valid_bits_1 < 8u)
+        {
+            sign_byte &= ((1u << valid_bits_1) - 1u);
+        }
+        bitstream_data_8b.data[offset_8b_1] = uchar(sign_byte);
+    }
+    if (payload_total_words != 0u)
+    {
+        uint payload_end = 4u * (global_payload_offset + payload_total_words);
+        uint _933 = (global_sign_offset + total_sign_bytes) + (index & 15u);
+        for (uint offset = _933; offset < payload_end; offset += 16u)
+        {
+            bitstream_data_8b.data[offset] = uchar(0u);
+        }
     }
 }
 

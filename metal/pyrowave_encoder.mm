@@ -425,8 +425,11 @@ bool create_encode_buffers(pyrowave_encoder encoder)
 		  size_t(layout.block_count_8x8) * sizeof(BlockMeta), "pyrowave-block-meta" },
 		// Worst case estimate, same as the Vulkan encoder's. The first two words are
 		// allocation counters and the coefficient payload starts at byte 8.
+		// 4:4:4 carries 3 samples per pixel against 1.5 for 4:2:0, so it needs twice
+		// the headroom or busy content overruns this buffer on the GPU.
 		{ &encoder->payload_data,
-		  size_t(layout.aligned_width) * size_t(layout.aligned_height) * 2, "pyrowave-payload" },
+		  size_t(layout.aligned_width) * size_t(layout.aligned_height) *
+		  (layout.chroma == ChromaSubsampling::Chroma444 ? 4 : 2), "pyrowave-payload" },
 		{ &encoder->quant_buffer,
 		  size_t(layout.block_count_32x32) * sizeof(uint32_t), "pyrowave-quant" },
 		{ &encoder->bucket_buffer, bucket_buffer_size(layout), "pyrowave-buckets" },
